@@ -1,0 +1,113 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: auth-v1-open
+    url: http://supabase-auth:9999/
+    plugins:
+      - name: cors
+  - name: auth-v1-open-callback
+    url: http://supabase-auth:9999/callback
+    plugins:
+      - name: cors
+  - name: auth-v1-open-authorize
+    url: http://supabase-auth:9999/authorize
+    plugins:
+      - name: cors
+
+  - name: rest-v1
+    url: http://supabase-rest:3000/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+
+  - name: realtime-v1
+    url: http://supabase-realtime:4000/socket/
+    plugins:
+      - name: cors
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+
+  - name: meta
+    url: http://supabase-meta:8080/
+    plugins:
+      - name: key-auth
+        config:
+          hide_credentials: false
+      - name: acl
+        config:
+          hide_groups_header: true
+
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+  - username: authenticated
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJleHAiOjE5ODM4MTI5OTZ9.5ixDxlCJyFxtVd5n1_UwRSCQTHGRGSjwGpfH3kS1HlQ
+  - username: service_role
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+
+acls:
+  - consumer: anon
+    group: anon
+  - consumer: authenticated
+    group: authenticated
+  - consumer: service_role
+    group: service_role
+
+routes:
+  - name: auth-v1-open
+    service: auth-v1-open
+    strip_path: true
+    paths:
+      - /auth/v1/signup
+      - /auth/v1/token
+      - /auth/v1/verify
+      - /auth/v1/recover
+      - /auth/v1/resend
+      - /auth/v1/logout
+      - /auth/v1/magiclink
+      - /auth/v1/user
+      - /auth/v1/callback
+      - /auth/v1/authorize
+
+  - name: auth-v1-open-callback
+    service: auth-v1-open-callback
+    strip_path: true
+    paths:
+      - /auth/v1/callback
+
+  - name: auth-v1-open-authorize
+    service: auth-v1-open-authorize
+    strip_path: true
+    paths:
+      - /auth/v1/authorize
+
+  - name: rest-v1
+    service: rest-v1
+    strip_path: true
+    paths:
+      - /rest/v1/
+
+  - name: realtime-v1
+    service: realtime-v1
+    strip_path: true
+    paths:
+      - /realtime/v1/
+
+  - name: meta
+    service: meta
+    strip_path: true
+    paths:
+      - /pg/

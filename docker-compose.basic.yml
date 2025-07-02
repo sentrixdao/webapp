@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Supabase Database
+  supabase-db:
+    image: supabase/postgres:15.1.0.117
+    container_name: sentrix-supabase-db
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./supabase/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Supabase API Gateway
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: sentrix-supabase-kong
+    restart: unless-stopped
+    ports:
+      - "54321:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
+    volumes:
+      - ./supabase/kong.yml:/var/lib/kong/kong.yml
+    depends_on:
+      - supabase-db
+
+  # Supabase Auth
+  supabase-auth:
+    image: supabase/gotrue:v2.99.0
+    container_name: sentrix-supabase-auth
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres?search_path=auth
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: http://localhost:3000
+      GOTRUE_DISABLE_SIGNUP: false
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+
+  # Supabase REST API
+  supabase-rest:
+    image: postgrest/postgrest:v11.2.0
+    container_name: sentrix-supabase-rest
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+
+  # Supabase Realtime
+  supabase-realtime:
+    image: supabase/realtime:v2.25.35
+    container_name: sentrix-supabase-realtime
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET}
+      FLY_ALLOC_ID: fly123
+      FLY_APP_NAME: realtime
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+
+  # Supabase Studio (Database Management UI)
+  supabase-studio:
+    image: supabase/studio:20231103-a5b96d9
+    container_name: sentrix-supabase-studio
+    restart: unless-stopped
+    ports:
+      - "54323:3000"
+    environment:
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+    depends_on:
+      - supabase-kong
+
+  # Supabase Meta (Database Metadata API)
+  supabase-meta:
+    image: supabase/postgres-meta:v0.68.0
+    container_name: sentrix-supabase-meta
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+  # Hardhat Local Blockchain
+  hardhat-node:
+    build:
+      context: .
+      dockerfile: Dockerfile.hardhat
+    container_name: sentrix-hardhat-node
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./contracts:/app/contracts
+      - ./scripts:/app/scripts
+      - ./hardhat.config.js:/app/hardhat.config.js
+    command: npx hardhat node --hostname 0.0.0.0
+
+volumes:
+  supabase-db-data:
